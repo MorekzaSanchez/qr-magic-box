@@ -474,6 +474,127 @@ const Index = () => {
               </div>
             </Card>
           </TabsContent>
+
+          <TabsContent value="scan" className="mt-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-semibold">Decode a QR code</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Upload an image or scan with your camera. Everything runs locally.
+                    </p>
+                  </div>
+
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) handleScanFile(f);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background/40 p-8 text-center transition-colors hover:border-primary/60 hover:bg-background/60"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm font-medium">Drop a QR image here or click to upload</p>
+                    <p className="text-xs text-muted-foreground">PNG, JPEG, WEBP, SVG raster…</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleScanFile(f);
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-xs text-muted-foreground">or</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="overflow-hidden rounded-xl border border-border bg-black/40 aspect-video flex items-center justify-center">
+                      {cameraOn ? (
+                        <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+                      ) : (
+                        <div className="text-center text-sm text-muted-foreground">
+                          <Camera className="mx-auto mb-2 h-8 w-8" />
+                          Camera is off
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button onClick={startCamera} disabled={cameraOn} className="gap-2">
+                        <Camera className="h-4 w-4" /> Start camera
+                      </Button>
+                      <Button onClick={stopCamera} disabled={!cameraOn} variant="secondary" className="gap-2">
+                        <X className="h-4 w-4" /> Stop
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">Scan result</h2>
+                    {(scanResult || scanPreview) && (
+                      <Button onClick={clearScan} variant="ghost" size="sm" className="gap-1.5">
+                        <X className="h-3.5 w-3.5" /> Clear
+                      </Button>
+                    )}
+                  </div>
+
+                  {scanPreview && (
+                    <div className="overflow-hidden rounded-xl border border-border bg-black/30 p-2">
+                      <img src={scanPreview} alt="Uploaded QR" className="mx-auto max-h-64 rounded" />
+                    </div>
+                  )}
+
+                  {scanBusy ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Decoding…
+                    </div>
+                  ) : scanResult ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-wide text-primary">Decoded data</Label>
+                        <div className="break-all rounded-lg border border-border bg-background/60 p-4 font-mono text-sm">
+                          {scanResult}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {isUrl(scanResult) && (
+                          <Button asChild className="gap-2 col-span-2">
+                            <a href={scanResult} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4" /> Open link
+                            </a>
+                          </Button>
+                        )}
+                        <Button onClick={copyResult} variant="secondary" className="gap-2 col-span-2">
+                          <Copy className="h-4 w-4" /> Copy data
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-background/30 p-8 text-center text-sm text-muted-foreground">
+                      Upload an image or start the camera to decode a QR code.
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    Scanning is performed 100% locally in your browser.
+                  </p>
+                </div>
+              </Card>
+            </div>
+          </TabsContent>
         </Tabs>
 
         <footer className="mt-12 flex items-center justify-center gap-2 text-xs text-muted-foreground">
