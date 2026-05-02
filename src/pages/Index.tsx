@@ -32,6 +32,16 @@ const Index = () => {
   const [svgString, setSvgString] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const [bulkInput, setBulkInput] = useState("https://lovable.dev\nhttps://github.com\nhttps://example.com");
+  const [bulkFormat, setBulkFormat] = useState<BulkFormat>("png");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+
+  const bulkValues = useMemo(
+    () => bulkInput.split(/\r?\n/).map((v) => v.trim()).filter(Boolean),
+    [bulkInput],
+  );
+
   const opts = useMemo(
     () => ({
       errorCorrectionLevel: ecLevel,
