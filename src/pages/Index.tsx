@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
+import JSZip from "jszip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Download, QrCode, Sparkles } from "lucide-react";
+import { Download, QrCode, Sparkles, Layers, Loader2 } from "lucide-react";
+
+type BulkFormat = "png" | "png-transparent" | "jpeg" | "svg" | "pdf";
+
+const slugify = (s: string, i: number) => {
+  const base = s.replace(/^https?:\/\//, "").replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+  return `${String(i + 1).padStart(3, "0")}_${base || "qr"}`;
+};
 
 type ECLevel = "L" | "M" | "Q" | "H";
 
@@ -21,6 +31,16 @@ const Index = () => {
   const [ecLevel, setEcLevel] = useState<ECLevel>("M");
   const [svgString, setSvgString] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [bulkInput, setBulkInput] = useState("https://lovable.dev\nhttps://github.com\nhttps://example.com");
+  const [bulkFormat, setBulkFormat] = useState<BulkFormat>("png");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+
+  const bulkValues = useMemo(
+    () => bulkInput.split(/\r?\n/).map((v) => v.trim()).filter(Boolean),
+    [bulkInput],
+  );
 
   const opts = useMemo(
     () => ({
@@ -90,6 +110,71 @@ const Index = () => {
     toast({ title: "Downloaded", description: "qrcode.pdf" });
   };
 
+  const generateBulk = async () => {
+    if (bulkValues.length === 0) {
+      toast({ title: "No values", description: "Paste at least one URL or text.", variant: "destructive" });
+      return;
+    }
+    if (bulkValues.length > 500) {
+      toast({ title: "Too many", description: "Limit is 500 entries per batch.", variant: "destructive" });
+      return;
+    }
+    setBulkBusy(true);
+    setBulkProgress(0);
+    try {
+      if (bulkFormat === "pdf") {
+        const pdf = new jsPDF({ unit: "pt", format: "a4" });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const imgSize = 360;
+        const x = (pageW - imgSize) / 2;
+        for (let i = 0; i < bulkValues.length; i++) {
+          const value = bulkValues[i];
+          const dataUrl = await QRCode.toDataURL(value, { ...opts, width: 1024 });
+          if (i > 0) pdf.addPage();
+          pdf.addImage(dataUrl, "PNG", x, 80, imgSize, imgSize);
+          pdf.setFontSize(10);
+          pdf.setTextColor(120);
+          const label = value.length > 80 ? value.slice(0, 80) + "…" : value;
+          pdf.text(label, pageW / 2, 80 + imgSize + 30, { align: "center" });
+          setBulkProgress(Math.round(((i + 1) / bulkValues.length) * 100));
+        }
+        pdf.save(`qrcodes-${bulkValues.length}.pdf`);
+      } else {
+        const zip = new JSZip();
+        for (let i = 0; i < bulkValues.length; i++) {
+          const value = bulkValues[i];
+          const name = slugify(value, i);
+          if (bulkFormat === "svg") {
+            const svg = await QRCode.toString(value, { ...opts, type: "svg" });
+            zip.file(`${name}.svg`, svg);
+          } else if (bulkFormat === "png") {
+            const dataUrl = await QRCode.toDataURL(value, opts);
+            zip.file(`${name}.png`, dataUrl.split(",")[1], { base64: true });
+          } else if (bulkFormat === "png-transparent") {
+            const dataUrl = await QRCode.toDataURL(value, { ...opts, color: { dark: fgColor, light: "#0000" } });
+            zip.file(`${name}.png`, dataUrl.split(",")[1], { base64: true });
+          } else if (bulkFormat === "jpeg") {
+            const canvas = document.createElement("canvas");
+            await QRCode.toCanvas(canvas, value, opts);
+            const blob: Blob = await new Promise((res) =>
+              canvas.toBlob((b) => res(b!), "image/jpeg", 0.95),
+            );
+            zip.file(`${name}.jpg`, blob);
+          }
+          setBulkProgress(Math.round(((i + 1) / bulkValues.length) * 100));
+        }
+        const blob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(blob, `qrcodes-${bulkValues.length}.zip`);
+      }
+      toast({ title: "Done", description: `Generated ${bulkValues.length} QR codes.` });
+    } catch (e) {
+      toast({ title: "Failed", description: String(e), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+      setBulkProgress(0);
+    }
+  };
+
   return (
     <main className="min-h-screen px-4 py-10 md:py-16">
       <div className="mx-auto max-w-6xl">
@@ -106,6 +191,12 @@ const Index = () => {
           </p>
         </header>
 
+        <Tabs defaultValue="single" className="mb-6">
+          <TabsList className="mx-auto grid w-full max-w-sm grid-cols-2">
+            <TabsTrigger value="single" className="gap-2"><QrCode className="h-3.5 w-3.5" /> Single</TabsTrigger>
+            <TabsTrigger value="bulk" className="gap-2"><Layers className="h-3.5 w-3.5" /> Bulk</TabsTrigger>
+          </TabsList>
+          <TabsContent value="single" className="mt-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           {/* Controls */}
           <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
@@ -220,6 +311,59 @@ const Index = () => {
             </div>
           </Card>
         </div>
+          </TabsContent>
+
+          <TabsContent value="bulk" className="mt-6">
+            <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="bulk">Paste URLs or text — one per line</Label>
+                  <Textarea
+                    id="bulk"
+                    value={bulkInput}
+                    onChange={(e) => setBulkInput(e.target.value)}
+                    placeholder={"https://example.com\nhttps://another.com\nAny text value"}
+                    className="min-h-[220px] font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {bulkValues.length} entr{bulkValues.length === 1 ? "y" : "ies"} · uses current color, size & error correction settings · max 500
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                  <div className="space-y-2">
+                    <Label>Output format</Label>
+                    <Select value={bulkFormat} onValueChange={(v) => setBulkFormat(v as BulkFormat)}>
+                      <SelectTrigger className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="png">PNG (.zip)</SelectItem>
+                        <SelectItem value="png-transparent">PNG · Transparent (.zip)</SelectItem>
+                        <SelectItem value="jpeg">JPEG (.zip)</SelectItem>
+                        <SelectItem value="svg">SVG (.zip)</SelectItem>
+                        <SelectItem value="pdf">PDF (multi-page)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={generateBulk} disabled={bulkBusy} className="h-11 gap-2">
+                    {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {bulkBusy ? `Generating ${bulkProgress}%` : `Generate ${bulkValues.length || ""}`}
+                  </Button>
+                </div>
+
+                {bulkBusy && (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${bulkProgress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <footer className="mt-12 flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <QrCode className="h-3.5 w-3.5" />
