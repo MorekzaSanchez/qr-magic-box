@@ -48,6 +48,13 @@ const Index = () => {
   const rafRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Bulk scan state
+  type BulkScanRow = { file: string; data: string; status: "ok" | "fail" };
+  const [bulkScanBusy, setBulkScanBusy] = useState(false);
+  const [bulkScanProgress, setBulkScanProgress] = useState(0);
+  const [bulkScanResults, setBulkScanResults] = useState<BulkScanRow[]>([]);
+  const bulkScanInputRef = useRef<HTMLInputElement>(null);
+
   const isUrl = (s: string) => /^(https?:\/\/|mailto:|tel:|sms:|geo:)/i.test(s.trim());
 
   const decodeImageData = (img: HTMLImageElement | HTMLVideoElement, w: number, h: number) => {
@@ -145,6 +152,73 @@ const Index = () => {
     setScanResult("");
     setScanPreview("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const decodeFileToText = async (file: File): Promise<string | null> => {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      const max = 1600;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const code = decodeImageData(img, w, h);
+      return code?.data ?? null;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const csvEscape = (s: string) => `"${s.replace(/"/g, '""')}"`;
+
+  const handleBulkScan = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (files.length > 500) {
+      toast({ title: "Too many", description: "Limit is 500 images per batch.", variant: "destructive" });
+      return;
+    }
+    setBulkScanBusy(true);
+    setBulkScanProgress(0);
+    setBulkScanResults([]);
+    const rows: BulkScanRow[] = [];
+    try {
+      const arr = Array.from(files);
+      for (let i = 0; i < arr.length; i++) {
+        const f = arr[i];
+        try {
+          const data = await decodeFileToText(f);
+          rows.push({ file: f.name, data: data ?? "", status: data ? "ok" : "fail" });
+        } catch {
+          rows.push({ file: f.name, data: "", status: "fail" });
+        }
+        setBulkScanProgress(Math.round(((i + 1) / arr.length) * 100));
+      }
+      setBulkScanResults(rows);
+
+      const zip = new JSZip();
+      const csv = ["file,status,data", ...rows.map((r) => `${csvEscape(r.file)},${r.status},${csvEscape(r.data)}`)].join("\n");
+      const txt = rows.map((r) => (r.status === "ok" ? r.data : `# FAILED: ${r.file}`)).join("\n");
+      const okOnly = rows.filter((r) => r.status === "ok").map((r) => r.data).join("\n");
+      zip.file("results.csv", csv);
+      zip.file("results.txt", txt);
+      zip.file("decoded-only.txt", okOnly);
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlob(blob, `qr-scan-${rows.length}.zip`);
+
+      const okCount = rows.filter((r) => r.status === "ok").length;
+      toast({ title: "Done", description: `${okCount}/${rows.length} decoded.` });
+    } catch (e) {
+      toast({ title: "Failed", description: String(e), variant: "destructive" });
+    } finally {
+      setBulkScanBusy(false);
+      setBulkScanProgress(0);
+      if (bulkScanInputRef.current) bulkScanInputRef.current.value = "";
+    }
   };
 
   const bulkValues = useMemo(
@@ -475,7 +549,7 @@ const Index = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="scan" className="mt-6">
+          <TabsContent value="scan" className="mt-6 space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
                 <div className="space-y-6">
@@ -594,6 +668,85 @@ const Index = () => {
                 </div>
               </Card>
             </div>
+
+            <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+              <div className="space-y-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-primary" /> Bulk scan
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Upload many QR images at once. Get a ZIP with CSV + text exports.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => bulkScanInputRef.current?.click()}
+                    disabled={bulkScanBusy}
+                    className="h-11 gap-2"
+                  >
+                    {bulkScanBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {bulkScanBusy ? `Scanning ${bulkScanProgress}%` : "Choose images"}
+                  </Button>
+                  <input
+                    ref={bulkScanInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleBulkScan(e.target.files)}
+                  />
+                </div>
+
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleBulkScan(e.dataTransfer.files);
+                  }}
+                  onClick={() => !bulkScanBusy && bulkScanInputRef.current?.click()}
+                  className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background/40 p-8 text-center transition-colors hover:border-primary/60 hover:bg-background/60"
+                >
+                  <Layers className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm font-medium">Drop multiple QR images here</p>
+                  <p className="text-xs text-muted-foreground">Up to 500 files · PNG, JPEG, WEBP</p>
+                </div>
+
+                {bulkScanBusy && (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${bulkScanProgress}%` }} />
+                  </div>
+                )}
+
+                {bulkScanResults.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {bulkScanResults.filter((r) => r.status === "ok").length}/{bulkScanResults.length} decoded
+                      </span>
+                      <span>ZIP downloaded</span>
+                    </div>
+                    <div className="max-h-64 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
+                      {bulkScanResults.map((r, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 text-xs">
+                          <span
+                            className={`mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full ${
+                              r.status === "ok" ? "bg-primary" : "bg-destructive"
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-mono truncate">{r.file}</div>
+                            <div className={`mt-0.5 break-all ${r.status === "ok" ? "text-foreground" : "text-muted-foreground italic"}`}>
+                              {r.status === "ok" ? r.data : "No QR detected"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
 
