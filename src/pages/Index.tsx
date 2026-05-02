@@ -48,6 +48,13 @@ const Index = () => {
   const rafRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Bulk scan state
+  type BulkScanRow = { file: string; data: string; status: "ok" | "fail" };
+  const [bulkScanBusy, setBulkScanBusy] = useState(false);
+  const [bulkScanProgress, setBulkScanProgress] = useState(0);
+  const [bulkScanResults, setBulkScanResults] = useState<BulkScanRow[]>([]);
+  const bulkScanInputRef = useRef<HTMLInputElement>(null);
+
   const isUrl = (s: string) => /^(https?:\/\/|mailto:|tel:|sms:|geo:)/i.test(s.trim());
 
   const decodeImageData = (img: HTMLImageElement | HTMLVideoElement, w: number, h: number) => {
