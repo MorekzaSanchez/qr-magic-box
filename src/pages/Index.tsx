@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Download, QrCode, Sparkles, Layers, Loader2 } from "lucide-react";
+import { Download, QrCode, Sparkles, Layers, Loader2, ScanLine, Upload, Copy, ExternalLink, X, Camera } from "lucide-react";
+import jsQR from "jsqr";
 
 type BulkFormat = "png" | "png-transparent" | "jpeg" | "svg" | "pdf";
 
@@ -36,6 +37,115 @@ const Index = () => {
   const [bulkFormat, setBulkFormat] = useState<BulkFormat>("png");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
+
+  // Scanner state
+  const [scanResult, setScanResult] = useState<string>("");
+  const [scanPreview, setScanPreview] = useState<string>("");
+  const [scanBusy, setScanBusy] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isUrl = (s: string) => /^(https?:\/\/|mailto:|tel:|sms:|geo:)/i.test(s.trim());
+
+  const decodeImageData = (img: HTMLImageElement | HTMLVideoElement, w: number, h: number) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h);
+    return jsQR(data.data, data.width, data.height, { inversionAttempts: "attemptBoth" });
+  };
+
+  const handleScanFile = async (file: File) => {
+    if (!file) return;
+    setScanBusy(true);
+    setScanResult("");
+    try {
+      const url = URL.createObjectURL(file);
+      setScanPreview(url);
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      const max = 1600;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const code = decodeImageData(img, w, h);
+      if (code?.data) {
+        setScanResult(code.data);
+        toast({ title: "QR decoded", description: code.data.slice(0, 60) });
+      } else {
+        toast({ title: "No QR found", description: "Try a clearer or higher-res image.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Failed to scan", description: String(e), variant: "destructive" });
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraOn(false);
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraOn(true);
+      const tick = () => {
+        const v = videoRef.current;
+        if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
+          const code = decodeImageData(v, v.videoWidth, v.videoHeight);
+          if (code?.data) {
+            setScanResult(code.data);
+            toast({ title: "QR decoded", description: code.data.slice(0, 60) });
+            stopCamera();
+            return;
+          }
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch (e) {
+      toast({ title: "Camera unavailable", description: String(e), variant: "destructive" });
+    }
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  const copyResult = async () => {
+    if (!scanResult) return;
+    await navigator.clipboard.writeText(scanResult);
+    toast({ title: "Copied", description: "Decoded data copied to clipboard." });
+  };
+
+  const clearScan = () => {
+    setScanResult("");
+    setScanPreview("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const bulkValues = useMemo(
     () => bulkInput.split(/\r?\n/).map((v) => v.trim()).filter(Boolean),
@@ -192,9 +302,10 @@ const Index = () => {
         </header>
 
         <Tabs defaultValue="single" className="mb-6">
-          <TabsList className="mx-auto grid w-full max-w-sm grid-cols-2">
+          <TabsList className="mx-auto grid w-full max-w-md grid-cols-3">
             <TabsTrigger value="single" className="gap-2"><QrCode className="h-3.5 w-3.5" /> Single</TabsTrigger>
             <TabsTrigger value="bulk" className="gap-2"><Layers className="h-3.5 w-3.5" /> Bulk</TabsTrigger>
+            <TabsTrigger value="scan" className="gap-2"><ScanLine className="h-3.5 w-3.5" /> Scan</TabsTrigger>
           </TabsList>
           <TabsContent value="single" className="mt-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
@@ -362,6 +473,127 @@ const Index = () => {
                 )}
               </div>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="scan" className="mt-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-semibold">Decode a QR code</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Upload an image or scan with your camera. Everything runs locally.
+                    </p>
+                  </div>
+
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) handleScanFile(f);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background/40 p-8 text-center transition-colors hover:border-primary/60 hover:bg-background/60"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm font-medium">Drop a QR image here or click to upload</p>
+                    <p className="text-xs text-muted-foreground">PNG, JPEG, WEBP, SVG raster…</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleScanFile(f);
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-xs text-muted-foreground">or</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="overflow-hidden rounded-xl border border-border bg-black/40 aspect-video flex items-center justify-center">
+                      {cameraOn ? (
+                        <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+                      ) : (
+                        <div className="text-center text-sm text-muted-foreground">
+                          <Camera className="mx-auto mb-2 h-8 w-8" />
+                          Camera is off
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button onClick={startCamera} disabled={cameraOn} className="gap-2">
+                        <Camera className="h-4 w-4" /> Start camera
+                      </Button>
+                      <Button onClick={stopCamera} disabled={!cameraOn} variant="secondary" className="gap-2">
+                        <X className="h-4 w-4" /> Stop
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">Scan result</h2>
+                    {(scanResult || scanPreview) && (
+                      <Button onClick={clearScan} variant="ghost" size="sm" className="gap-1.5">
+                        <X className="h-3.5 w-3.5" /> Clear
+                      </Button>
+                    )}
+                  </div>
+
+                  {scanPreview && (
+                    <div className="overflow-hidden rounded-xl border border-border bg-black/30 p-2">
+                      <img src={scanPreview} alt="Uploaded QR" className="mx-auto max-h-64 rounded" />
+                    </div>
+                  )}
+
+                  {scanBusy ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Decoding…
+                    </div>
+                  ) : scanResult ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-wide text-primary">Decoded data</Label>
+                        <div className="break-all rounded-lg border border-border bg-background/60 p-4 font-mono text-sm">
+                          {scanResult}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {isUrl(scanResult) && (
+                          <Button asChild className="gap-2 col-span-2">
+                            <a href={scanResult} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4" /> Open link
+                            </a>
+                          </Button>
+                        )}
+                        <Button onClick={copyResult} variant="secondary" className="gap-2 col-span-2">
+                          <Copy className="h-4 w-4" /> Copy data
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-background/30 p-8 text-center text-sm text-muted-foreground">
+                      Upload an image or start the camera to decode a QR code.
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    Scanning is performed 100% locally in your browser.
+                  </p>
+                </div>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
