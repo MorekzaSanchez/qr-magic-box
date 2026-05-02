@@ -668,6 +668,85 @@ const Index = () => {
                 </div>
               </Card>
             </div>
+
+            <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+              <div className="space-y-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-primary" /> Bulk scan
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Upload many QR images at once. Get a ZIP with CSV + text exports.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => bulkScanInputRef.current?.click()}
+                    disabled={bulkScanBusy}
+                    className="h-11 gap-2"
+                  >
+                    {bulkScanBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {bulkScanBusy ? `Scanning ${bulkScanProgress}%` : "Choose images"}
+                  </Button>
+                  <input
+                    ref={bulkScanInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleBulkScan(e.target.files)}
+                  />
+                </div>
+
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleBulkScan(e.dataTransfer.files);
+                  }}
+                  onClick={() => !bulkScanBusy && bulkScanInputRef.current?.click()}
+                  className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background/40 p-8 text-center transition-colors hover:border-primary/60 hover:bg-background/60"
+                >
+                  <Layers className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm font-medium">Drop multiple QR images here</p>
+                  <p className="text-xs text-muted-foreground">Up to 500 files · PNG, JPEG, WEBP</p>
+                </div>
+
+                {bulkScanBusy && (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${bulkScanProgress}%` }} />
+                  </div>
+                )}
+
+                {bulkScanResults.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {bulkScanResults.filter((r) => r.status === "ok").length}/{bulkScanResults.length} decoded
+                      </span>
+                      <span>ZIP downloaded</span>
+                    </div>
+                    <div className="max-h-64 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
+                      {bulkScanResults.map((r, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 text-xs">
+                          <span
+                            className={`mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full ${
+                              r.status === "ok" ? "bg-primary" : "bg-destructive"
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-mono truncate">{r.file}</div>
+                            <div className={`mt-0.5 break-all ${r.status === "ok" ? "text-foreground" : "text-muted-foreground italic"}`}>
+                              {r.status === "ok" ? r.data : "No QR detected"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
 
