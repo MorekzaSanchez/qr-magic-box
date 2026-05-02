@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
+import JSZip from "jszip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Download, QrCode, Sparkles } from "lucide-react";
+import { Download, QrCode, Sparkles, Layers, Loader2 } from "lucide-react";
+
+type BulkFormat = "png" | "png-transparent" | "jpeg" | "svg" | "pdf";
+
+const slugify = (s: string, i: number) => {
+  const base = s.replace(/^https?:\/\//, "").replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+  return `${String(i + 1).padStart(3, "0")}_${base || "qr"}`;
+};
 
 type ECLevel = "L" | "M" | "Q" | "H";
 
