@@ -549,7 +549,7 @@ const Index = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="scan" className="mt-6">
+          <TabsContent value="scan" className="mt-6 space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
                 <div className="space-y-6">
