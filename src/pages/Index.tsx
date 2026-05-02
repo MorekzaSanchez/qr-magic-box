@@ -38,6 +38,115 @@ const Index = () => {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
 
+  // Scanner state
+  const [scanResult, setScanResult] = useState<string>("");
+  const [scanPreview, setScanPreview] = useState<string>("");
+  const [scanBusy, setScanBusy] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isUrl = (s: string) => /^(https?:\/\/|mailto:|tel:|sms:|geo:)/i.test(s.trim());
+
+  const decodeImageData = (img: HTMLImageElement | HTMLVideoElement, w: number, h: number) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h);
+    return jsQR(data.data, data.width, data.height, { inversionAttempts: "attemptBoth" });
+  };
+
+  const handleScanFile = async (file: File) => {
+    if (!file) return;
+    setScanBusy(true);
+    setScanResult("");
+    try {
+      const url = URL.createObjectURL(file);
+      setScanPreview(url);
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      const max = 1600;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const code = decodeImageData(img, w, h);
+      if (code?.data) {
+        setScanResult(code.data);
+        toast({ title: "QR decoded", description: code.data.slice(0, 60) });
+      } else {
+        toast({ title: "No QR found", description: "Try a clearer or higher-res image.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Failed to scan", description: String(e), variant: "destructive" });
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraOn(false);
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraOn(true);
+      const tick = () => {
+        const v = videoRef.current;
+        if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
+          const code = decodeImageData(v, v.videoWidth, v.videoHeight);
+          if (code?.data) {
+            setScanResult(code.data);
+            toast({ title: "QR decoded", description: code.data.slice(0, 60) });
+            stopCamera();
+            return;
+          }
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch (e) {
+      toast({ title: "Camera unavailable", description: String(e), variant: "destructive" });
+    }
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  const copyResult = async () => {
+    if (!scanResult) return;
+    await navigator.clipboard.writeText(scanResult);
+    toast({ title: "Copied", description: "Decoded data copied to clipboard." });
+  };
+
+  const clearScan = () => {
+    setScanResult("");
+    setScanPreview("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const bulkValues = useMemo(
     () => bulkInput.split(/\r?\n/).map((v) => v.trim()).filter(Boolean),
     [bulkInput],
