@@ -311,6 +311,59 @@ const Index = () => {
             </div>
           </Card>
         </div>
+          </TabsContent>
+
+          <TabsContent value="bulk" className="mt-6">
+            <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="bulk">Paste URLs or text — one per line</Label>
+                  <Textarea
+                    id="bulk"
+                    value={bulkInput}
+                    onChange={(e) => setBulkInput(e.target.value)}
+                    placeholder={"https://example.com\nhttps://another.com\nAny text value"}
+                    className="min-h-[220px] font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {bulkValues.length} entr{bulkValues.length === 1 ? "y" : "ies"} · uses current color, size & error correction settings · max 500
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                  <div className="space-y-2">
+                    <Label>Output format</Label>
+                    <Select value={bulkFormat} onValueChange={(v) => setBulkFormat(v as BulkFormat)}>
+                      <SelectTrigger className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="png">PNG (.zip)</SelectItem>
+                        <SelectItem value="png-transparent">PNG · Transparent (.zip)</SelectItem>
+                        <SelectItem value="jpeg">JPEG (.zip)</SelectItem>
+                        <SelectItem value="svg">SVG (.zip)</SelectItem>
+                        <SelectItem value="pdf">PDF (multi-page)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={generateBulk} disabled={bulkBusy} className="h-11 gap-2">
+                    {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {bulkBusy ? `Generating ${bulkProgress}%` : `Generate ${bulkValues.length || ""}`}
+                  </Button>
+                </div>
+
+                {bulkBusy && (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${bulkProgress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <footer className="mt-12 flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <QrCode className="h-3.5 w-3.5" />
