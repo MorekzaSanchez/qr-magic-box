@@ -302,9 +302,10 @@ const Index = () => {
         </header>
 
         <Tabs defaultValue="single" className="mb-6">
-          <TabsList className="mx-auto grid w-full max-w-sm grid-cols-2">
+          <TabsList className="mx-auto grid w-full max-w-md grid-cols-3">
             <TabsTrigger value="single" className="gap-2"><QrCode className="h-3.5 w-3.5" /> Single</TabsTrigger>
             <TabsTrigger value="bulk" className="gap-2"><Layers className="h-3.5 w-3.5" /> Bulk</TabsTrigger>
+            <TabsTrigger value="scan" className="gap-2"><ScanLine className="h-3.5 w-3.5" /> Scan</TabsTrigger>
           </TabsList>
           <TabsContent value="single" className="mt-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
