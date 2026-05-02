@@ -110,6 +110,71 @@ const Index = () => {
     toast({ title: "Downloaded", description: "qrcode.pdf" });
   };
 
+  const generateBulk = async () => {
+    if (bulkValues.length === 0) {
+      toast({ title: "No values", description: "Paste at least one URL or text.", variant: "destructive" });
+      return;
+    }
+    if (bulkValues.length > 500) {
+      toast({ title: "Too many", description: "Limit is 500 entries per batch.", variant: "destructive" });
+      return;
+    }
+    setBulkBusy(true);
+    setBulkProgress(0);
+    try {
+      if (bulkFormat === "pdf") {
+        const pdf = new jsPDF({ unit: "pt", format: "a4" });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const imgSize = 360;
+        const x = (pageW - imgSize) / 2;
+        for (let i = 0; i < bulkValues.length; i++) {
+          const value = bulkValues[i];
+          const dataUrl = await QRCode.toDataURL(value, { ...opts, width: 1024 });
+          if (i > 0) pdf.addPage();
+          pdf.addImage(dataUrl, "PNG", x, 80, imgSize, imgSize);
+          pdf.setFontSize(10);
+          pdf.setTextColor(120);
+          const label = value.length > 80 ? value.slice(0, 80) + "…" : value;
+          pdf.text(label, pageW / 2, 80 + imgSize + 30, { align: "center" });
+          setBulkProgress(Math.round(((i + 1) / bulkValues.length) * 100));
+        }
+        pdf.save(`qrcodes-${bulkValues.length}.pdf`);
+      } else {
+        const zip = new JSZip();
+        for (let i = 0; i < bulkValues.length; i++) {
+          const value = bulkValues[i];
+          const name = slugify(value, i);
+          if (bulkFormat === "svg") {
+            const svg = await QRCode.toString(value, { ...opts, type: "svg" });
+            zip.file(`${name}.svg`, svg);
+          } else if (bulkFormat === "png") {
+            const dataUrl = await QRCode.toDataURL(value, opts);
+            zip.file(`${name}.png`, dataUrl.split(",")[1], { base64: true });
+          } else if (bulkFormat === "png-transparent") {
+            const dataUrl = await QRCode.toDataURL(value, { ...opts, color: { dark: fgColor, light: "#0000" } });
+            zip.file(`${name}.png`, dataUrl.split(",")[1], { base64: true });
+          } else if (bulkFormat === "jpeg") {
+            const canvas = document.createElement("canvas");
+            await QRCode.toCanvas(canvas, value, opts);
+            const blob: Blob = await new Promise((res) =>
+              canvas.toBlob((b) => res(b!), "image/jpeg", 0.95),
+            );
+            zip.file(`${name}.jpg`, blob);
+          }
+          setBulkProgress(Math.round(((i + 1) / bulkValues.length) * 100));
+        }
+        const blob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(blob, `qrcodes-${bulkValues.length}.zip`);
+      }
+      toast({ title: "Done", description: `Generated ${bulkValues.length} QR codes.` });
+    } catch (e) {
+      toast({ title: "Failed", description: String(e), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+      setBulkProgress(0);
+    }
+  };
+
   return (
     <main className="min-h-screen px-4 py-10 md:py-16">
       <div className="mx-auto max-w-6xl">
