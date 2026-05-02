@@ -154,6 +154,73 @@ const Index = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const decodeFileToText = async (file: File): Promise<string | null> => {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      const max = 1600;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const code = decodeImageData(img, w, h);
+      return code?.data ?? null;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const csvEscape = (s: string) => `"${s.replace(/"/g, '""')}"`;
+
+  const handleBulkScan = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (files.length > 500) {
+      toast({ title: "Too many", description: "Limit is 500 images per batch.", variant: "destructive" });
+      return;
+    }
+    setBulkScanBusy(true);
+    setBulkScanProgress(0);
+    setBulkScanResults([]);
+    const rows: BulkScanRow[] = [];
+    try {
+      const arr = Array.from(files);
+      for (let i = 0; i < arr.length; i++) {
+        const f = arr[i];
+        try {
+          const data = await decodeFileToText(f);
+          rows.push({ file: f.name, data: data ?? "", status: data ? "ok" : "fail" });
+        } catch {
+          rows.push({ file: f.name, data: "", status: "fail" });
+        }
+        setBulkScanProgress(Math.round(((i + 1) / arr.length) * 100));
+      }
+      setBulkScanResults(rows);
+
+      const zip = new JSZip();
+      const csv = ["file,status,data", ...rows.map((r) => `${csvEscape(r.file)},${r.status},${csvEscape(r.data)}`)].join("\n");
+      const txt = rows.map((r) => (r.status === "ok" ? r.data : `# FAILED: ${r.file}`)).join("\n");
+      const okOnly = rows.filter((r) => r.status === "ok").map((r) => r.data).join("\n");
+      zip.file("results.csv", csv);
+      zip.file("results.txt", txt);
+      zip.file("decoded-only.txt", okOnly);
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlob(blob, `qr-scan-${rows.length}.zip`);
+
+      const okCount = rows.filter((r) => r.status === "ok").length;
+      toast({ title: "Done", description: `${okCount}/${rows.length} decoded.` });
+    } catch (e) {
+      toast({ title: "Failed", description: String(e), variant: "destructive" });
+    } finally {
+      setBulkScanBusy(false);
+      setBulkScanProgress(0);
+      if (bulkScanInputRef.current) bulkScanInputRef.current.value = "";
+    }
+  };
+
   const bulkValues = useMemo(
     () => bulkInput.split(/\r?\n/).map((v) => v.trim()).filter(Boolean),
     [bulkInput],
