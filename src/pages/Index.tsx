@@ -107,10 +107,13 @@ const Index = () => {
       const w = Math.round(img.width * scale);
       const h = Math.round(img.height * scale);
       const code = decodeImageData(img, w, h);
+      const thumb = await makeThumb(file);
       if (code?.data) {
         setScanResult(code.data);
+        addHistory([{ id: `${Date.now()}`, at: Date.now(), data: code.data, status: "ok", file: file.name, thumb, source: "single" }]);
         toast({ title: "QR decoded", description: code.data.slice(0, 60) });
       } else {
+        addHistory([{ id: `${Date.now()}`, at: Date.now(), data: "", status: "fail", file: file.name, thumb, source: "single" }]);
         toast({ title: "No QR found", description: "Try a clearer or higher-res image.", variant: "destructive" });
       }
     } catch (e) {
