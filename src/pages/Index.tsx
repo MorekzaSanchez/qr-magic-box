@@ -809,6 +809,78 @@ const Index = () => {
                 )}
               </div>
             </Card>
+
+            <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+              <div className="space-y-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <ScanLine className="h-4 w-4 text-primary" /> Past scans
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Last {HISTORY_LIMIT} scans, stored locally in your browser.
+                    </p>
+                  </div>
+                  {history.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={clearHistory} className="gap-2">
+                      <X className="h-4 w-4" /> Clear history
+                    </Button>
+                  )}
+                </div>
+
+                {history.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No scans yet.</p>
+                ) : (
+                  <div className="max-h-96 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
+                    {history.map((h) => (
+                      <div key={h.id} className="flex items-start gap-3 p-3 text-xs">
+                        {h.thumb ? (
+                          <img src={h.thumb} alt={h.file} className="h-12 w-12 shrink-0 rounded border border-border object-cover" />
+                        ) : (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border bg-muted">
+                            <Camera className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className={`inline-block h-2 w-2 rounded-full ${h.status === "ok" ? "bg-primary" : "bg-destructive"}`} />
+                            <span className="font-mono truncate">{h.file}</span>
+                            <span className="ml-auto shrink-0">{new Date(h.at).toLocaleString()}</span>
+                          </div>
+                          <div className={`mt-1 break-all ${h.status === "ok" ? "text-foreground" : "text-muted-foreground italic"}`}>
+                            {h.status === "ok" ? h.data : "No QR detected"}
+                          </div>
+                          {h.status === "ok" && (
+                            <div className="mt-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => { navigator.clipboard.writeText(h.data); toast({ title: "Copied" }); }}
+                              >
+                                <Copy className="h-3 w-3" /> Copy
+                              </Button>
+                              {isUrl(h.data) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  asChild
+                                >
+                                  <a href={h.data} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-3 w-3" /> Open
+                                  </a>
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
 
