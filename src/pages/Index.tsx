@@ -49,11 +49,32 @@ const Index = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk scan state
-  type BulkScanRow = { file: string; data: string; status: "ok" | "fail" };
+  type BulkScanRow = { file: string; data: string; status: "ok" | "fail"; thumb: string };
   const [bulkScanBusy, setBulkScanBusy] = useState(false);
   const [bulkScanProgress, setBulkScanProgress] = useState(0);
   const [bulkScanResults, setBulkScanResults] = useState<BulkScanRow[]>([]);
   const bulkScanInputRef = useRef<HTMLInputElement>(null);
+
+  // History (persisted)
+  type HistoryEntry = { id: string; at: number; data: string; status: "ok" | "fail"; file: string; thumb: string; source: "single" | "bulk" | "camera" };
+  const HISTORY_KEY = "qr_scan_history_v1";
+  const HISTORY_LIMIT = 100;
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_LIMIT))); } catch { /* noop */ }
+  }, [history]);
+  const addHistory = (entries: HistoryEntry[]) => {
+    if (!entries.length) return;
+    setHistory((prev) => [...entries, ...prev].slice(0, HISTORY_LIMIT));
+  };
+  const clearHistory = () => setHistory([]);
 
   const isUrl = (s: string) => /^(https?:\/\/|mailto:|tel:|sms:|geo:)/i.test(s.trim());
 
