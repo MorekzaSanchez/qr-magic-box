@@ -29,9 +29,73 @@ const Index = () => {
   const [margin, setMargin] = useState(2);
   const [fgColor, setFgColor] = useState("#0afba1");
   const [bgColor, setBgColor] = useState("#0f1419");
-  const [ecLevel, setEcLevel] = useState<ECLevel>("M");
+  const [ecLevel, setEcLevel] = useState<ECLevel>("H");
   const [svgString, setSvgString] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Logo overlay
+  const [logoDataUrl, setLogoDataUrl] = useState<string>("");
+  const [logoSize, setLogoSize] = useState(20); // % of QR width
+  const [logoPadding, setLogoPadding] = useState(6); // % of QR width
+  const [logoShape, setLogoShape] = useState<"square" | "circle" | "rounded">("rounded");
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoFile = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setLogoDataUrl(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
+  const loadLogoImage = async (): Promise<HTMLImageElement | null> => {
+    if (!logoDataUrl) return null;
+    return new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = logoDataUrl;
+    });
+  };
+
+  const drawLogoOnCanvas = async (canvas: HTMLCanvasElement, transparent: boolean) => {
+    if (!logoDataUrl) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = await loadLogoImage();
+    if (!img) return;
+    const W = canvas.width;
+    const target = Math.round((logoSize / 100) * W);
+    const pad = Math.round((logoPadding / 100) * W);
+    const x = (W - target) / 2;
+    const y = (W - target) / 2;
+    ctx.save();
+    ctx.fillStyle = transparent ? "rgba(255,255,255,1)" : bgColor;
+    if (logoShape === "circle") {
+      ctx.beginPath();
+      ctx.arc(W / 2, W / 2, target / 2 + pad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(W / 2, W / 2, target / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, x, y, target, target);
+    } else if (logoShape === "rounded") {
+      const r = Math.round(target * 0.18);
+      const rx = x - pad, ry = y - pad, rw = target + pad * 2, rh = target + pad * 2;
+      ctx.beginPath();
+      ctx.moveTo(rx + r, ry);
+      ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+      ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
+      ctx.arcTo(rx, ry + rh, rx, ry, r);
+      ctx.arcTo(rx, ry, rx + rw, ry, r);
+      ctx.closePath();
+      ctx.fill();
+      ctx.drawImage(img, x, y, target, target);
+    } else {
+      ctx.fillRect(x - pad, y - pad, target + pad * 2, target + pad * 2);
+      ctx.drawImage(img, x, y, target, target);
+    }
+    ctx.restore();
+  };
 
   const [bulkInput, setBulkInput] = useState("https://lovable.dev\nhttps://github.com\nhttps://example.com");
   const [bulkFormat, setBulkFormat] = useState<BulkFormat>("png");
