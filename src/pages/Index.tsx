@@ -409,7 +409,10 @@ const Index = () => {
 
   const downloadPDF = async () => {
     if (!text.trim()) return;
-    const dataUrl = await QRCode.toDataURL(text, { ...opts, width: 1024 });
+    const canvas = document.createElement("canvas");
+    await QRCode.toCanvas(canvas, text, { ...opts, width: 1024 });
+    await drawLogoOnCanvas(canvas, false);
+    const dataUrl = canvas.toDataURL("image/png");
     const pdf = new jsPDF({ unit: "pt", format: "a4" });
     const pageW = pdf.internal.pageSize.getWidth();
     const imgSize = 360;
