@@ -359,13 +359,19 @@ const Index = () => {
 
   useEffect(() => {
     if (!text.trim()) return;
-    if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, text, opts).catch(() => {});
-    }
-    QRCode.toString(text, { ...opts, type: "svg" })
-      .then(setSvgString)
-      .catch(() => {});
-  }, [text, opts]);
+    (async () => {
+      if (canvasRef.current) {
+        try {
+          await QRCode.toCanvas(canvasRef.current, text, opts);
+          await drawLogoOnCanvas(canvasRef.current, false);
+        } catch { /* noop */ }
+      }
+      try {
+        const s = await QRCode.toString(text, { ...opts, type: "svg" });
+        setSvgString(s);
+      } catch { /* noop */ }
+    })();
+  }, [text, opts, logoDataUrl, logoSize, logoPadding, logoShape, bgColor]);
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -379,18 +385,20 @@ const Index = () => {
 
   const downloadPNG = async (transparent: boolean) => {
     if (!text.trim()) return;
-    const dataUrl = await QRCode.toDataURL(text, {
+    const canvas = document.createElement("canvas");
+    await QRCode.toCanvas(canvas, text, {
       ...opts,
       color: { dark: fgColor, light: transparent ? "#0000" : bgColor },
     });
-    const res = await fetch(dataUrl);
-    downloadBlob(await res.blob(), transparent ? "qrcode-transparent.png" : "qrcode.png");
+    await drawLogoOnCanvas(canvas, transparent);
+    canvas.toBlob((b) => b && downloadBlob(b, transparent ? "qrcode-transparent.png" : "qrcode.png"), "image/png");
   };
 
   const downloadJPEG = async () => {
     if (!text.trim()) return;
     const canvas = document.createElement("canvas");
     await QRCode.toCanvas(canvas, text, opts);
+    await drawLogoOnCanvas(canvas, false);
     canvas.toBlob((b) => b && downloadBlob(b, "qrcode.jpg"), "image/jpeg", 0.95);
   };
 
