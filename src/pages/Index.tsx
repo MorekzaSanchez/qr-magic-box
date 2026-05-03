@@ -151,6 +151,7 @@ const Index = () => {
           const code = decodeImageData(v, v.videoWidth, v.videoHeight);
           if (code?.data) {
             setScanResult(code.data);
+            addHistory([{ id: `${Date.now()}`, at: Date.now(), data: code.data, status: "ok", file: "camera", thumb: "", source: "camera" }]);
             toast({ title: "QR decoded", description: code.data.slice(0, 60) });
             stopCamera();
             return;
