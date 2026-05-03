@@ -197,6 +197,28 @@ const Index = () => {
 
   const csvEscape = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
+  const makeThumb = async (file: File, max = 96): Promise<string> => {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      ctx.drawImage(img, 0, 0, w, h);
+      return c.toDataURL("image/jpeg", 0.7);
+    } catch {
+      return "";
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const handleBulkScan = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     if (files.length > 500) {
@@ -211,15 +233,25 @@ const Index = () => {
       const arr = Array.from(files);
       for (let i = 0; i < arr.length; i++) {
         const f = arr[i];
+        const thumb = await makeThumb(f);
         try {
           const data = await decodeFileToText(f);
-          rows.push({ file: f.name, data: data ?? "", status: data ? "ok" : "fail" });
+          rows.push({ file: f.name, data: data ?? "", status: data ? "ok" : "fail", thumb });
         } catch {
-          rows.push({ file: f.name, data: "", status: "fail" });
+          rows.push({ file: f.name, data: "", status: "fail", thumb });
         }
         setBulkScanProgress(Math.round(((i + 1) / arr.length) * 100));
       }
       setBulkScanResults(rows);
+      addHistory(rows.map((r, idx) => ({
+        id: `${Date.now()}_${idx}`,
+        at: Date.now(),
+        data: r.data,
+        status: r.status,
+        file: r.file,
+        thumb: r.thumb,
+        source: "bulk" as const,
+      })));
 
       const zip = new JSZip();
       const csv = ["file,status,data", ...rows.map((r) => `${csvEscape(r.file)},${r.status},${csvEscape(r.data)}`)].join("\n");
