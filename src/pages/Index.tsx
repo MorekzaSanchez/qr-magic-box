@@ -438,6 +438,18 @@ const Index = () => {
     setBulkBusy(true);
     setBulkProgress(0);
     try {
+      const renderCanvas = async (value: string, transparent = false): Promise<HTMLCanvasElement> => {
+        const canvas = document.createElement("canvas");
+        const renderOpts = transparent
+          ? { ...opts, width: 1024, color: { dark: fgColor, light: "#0000" } }
+          : { ...opts, width: 1024 };
+        await QRCode.toCanvas(canvas, value, renderOpts);
+        await drawLogoOnCanvas(canvas, transparent);
+        return canvas;
+      };
+      const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> =>
+        new Promise((res) => canvas.toBlob((b) => res(b!), type, quality));
+
       if (bulkFormat === "pdf") {
         const pdf = new jsPDF({ unit: "pt", format: "a4" });
         const pageW = pdf.internal.pageSize.getWidth();
@@ -445,7 +457,8 @@ const Index = () => {
         const x = (pageW - imgSize) / 2;
         for (let i = 0; i < bulkValues.length; i++) {
           const value = bulkValues[i];
-          const dataUrl = await QRCode.toDataURL(value, { ...opts, width: 1024 });
+          const canvas = await renderCanvas(value);
+          const dataUrl = canvas.toDataURL("image/png");
           if (i > 0) pdf.addPage();
           pdf.addImage(dataUrl, "PNG", x, 80, imgSize, imgSize);
           pdf.setFontSize(10);
@@ -456,6 +469,9 @@ const Index = () => {
         }
         pdf.save(`qrcodes-${bulkValues.length}.pdf`);
       } else {
+        if (bulkFormat === "svg" && logoDataUrl) {
+          toast({ title: "Logo skipped for SVG", description: "Logo overlay is only applied to PNG/JPEG/PDF exports." });
+        }
         const zip = new JSZip();
         for (let i = 0; i < bulkValues.length; i++) {
           const value = bulkValues[i];
@@ -464,17 +480,16 @@ const Index = () => {
             const svg = await QRCode.toString(value, { ...opts, type: "svg" });
             zip.file(`${name}.svg`, svg);
           } else if (bulkFormat === "png") {
-            const dataUrl = await QRCode.toDataURL(value, opts);
-            zip.file(`${name}.png`, dataUrl.split(",")[1], { base64: true });
+            const canvas = await renderCanvas(value);
+            const blob = await canvasToBlob(canvas, "image/png");
+            zip.file(`${name}.png`, blob);
           } else if (bulkFormat === "png-transparent") {
-            const dataUrl = await QRCode.toDataURL(value, { ...opts, color: { dark: fgColor, light: "#0000" } });
-            zip.file(`${name}.png`, dataUrl.split(",")[1], { base64: true });
+            const canvas = await renderCanvas(value, true);
+            const blob = await canvasToBlob(canvas, "image/png");
+            zip.file(`${name}.png`, blob);
           } else if (bulkFormat === "jpeg") {
-            const canvas = document.createElement("canvas");
-            await QRCode.toCanvas(canvas, value, opts);
-            const blob: Blob = await new Promise((res) =>
-              canvas.toBlob((b) => res(b!), "image/jpeg", 0.95),
-            );
+            const canvas = await renderCanvas(value);
+            const blob = await canvasToBlob(canvas, "image/jpeg", 0.95);
             zip.file(`${name}.jpg`, blob);
           }
           setBulkProgress(Math.round(((i + 1) / bulkValues.length) * 100));
