@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Download, QrCode, Sparkles, Layers, Loader2, ScanLine, Upload, Copy, ExternalLink, X, Camera } from "lucide-react";
+import { Download, QrCode, Sparkles, Layers, Loader2, ScanLine, Upload, Copy, ExternalLink, X, Camera, ImageIcon } from "lucide-react";
 import jsQR from "jsqr";
 
 type BulkFormat = "png" | "png-transparent" | "jpeg" | "svg" | "pdf";
