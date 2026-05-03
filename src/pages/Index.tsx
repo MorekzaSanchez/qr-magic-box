@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Download, QrCode, Sparkles, Layers, Loader2, ScanLine, Upload, Copy, ExternalLink, X, Camera } from "lucide-react";
+import { Download, QrCode, Sparkles, Layers, Loader2, ScanLine, Upload, Copy, ExternalLink, X, Camera, ImageIcon } from "lucide-react";
 import jsQR from "jsqr";
 
 type BulkFormat = "png" | "png-transparent" | "jpeg" | "svg" | "pdf";
@@ -29,9 +29,73 @@ const Index = () => {
   const [margin, setMargin] = useState(2);
   const [fgColor, setFgColor] = useState("#0afba1");
   const [bgColor, setBgColor] = useState("#0f1419");
-  const [ecLevel, setEcLevel] = useState<ECLevel>("M");
+  const [ecLevel, setEcLevel] = useState<ECLevel>("H");
   const [svgString, setSvgString] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Logo overlay
+  const [logoDataUrl, setLogoDataUrl] = useState<string>("");
+  const [logoSize, setLogoSize] = useState(20); // % of QR width
+  const [logoPadding, setLogoPadding] = useState(6); // % of QR width
+  const [logoShape, setLogoShape] = useState<"square" | "circle" | "rounded">("rounded");
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoFile = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setLogoDataUrl(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
+  const loadLogoImage = async (): Promise<HTMLImageElement | null> => {
+    if (!logoDataUrl) return null;
+    return new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = logoDataUrl;
+    });
+  };
+
+  const drawLogoOnCanvas = async (canvas: HTMLCanvasElement, transparent: boolean) => {
+    if (!logoDataUrl) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = await loadLogoImage();
+    if (!img) return;
+    const W = canvas.width;
+    const target = Math.round((logoSize / 100) * W);
+    const pad = Math.round((logoPadding / 100) * W);
+    const x = (W - target) / 2;
+    const y = (W - target) / 2;
+    ctx.save();
+    ctx.fillStyle = transparent ? "rgba(255,255,255,1)" : bgColor;
+    if (logoShape === "circle") {
+      ctx.beginPath();
+      ctx.arc(W / 2, W / 2, target / 2 + pad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(W / 2, W / 2, target / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, x, y, target, target);
+    } else if (logoShape === "rounded") {
+      const r = Math.round(target * 0.18);
+      const rx = x - pad, ry = y - pad, rw = target + pad * 2, rh = target + pad * 2;
+      ctx.beginPath();
+      ctx.moveTo(rx + r, ry);
+      ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+      ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
+      ctx.arcTo(rx, ry + rh, rx, ry, r);
+      ctx.arcTo(rx, ry, rx + rw, ry, r);
+      ctx.closePath();
+      ctx.fill();
+      ctx.drawImage(img, x, y, target, target);
+    } else {
+      ctx.fillRect(x - pad, y - pad, target + pad * 2, target + pad * 2);
+      ctx.drawImage(img, x, y, target, target);
+    }
+    ctx.restore();
+  };
 
   const [bulkInput, setBulkInput] = useState("https://lovable.dev\nhttps://github.com\nhttps://example.com");
   const [bulkFormat, setBulkFormat] = useState<BulkFormat>("png");
@@ -295,13 +359,19 @@ const Index = () => {
 
   useEffect(() => {
     if (!text.trim()) return;
-    if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, text, opts).catch(() => {});
-    }
-    QRCode.toString(text, { ...opts, type: "svg" })
-      .then(setSvgString)
-      .catch(() => {});
-  }, [text, opts]);
+    (async () => {
+      if (canvasRef.current) {
+        try {
+          await QRCode.toCanvas(canvasRef.current, text, opts);
+          await drawLogoOnCanvas(canvasRef.current, false);
+        } catch { /* noop */ }
+      }
+      try {
+        const s = await QRCode.toString(text, { ...opts, type: "svg" });
+        setSvgString(s);
+      } catch { /* noop */ }
+    })();
+  }, [text, opts, logoDataUrl, logoSize, logoPadding, logoShape, bgColor]);
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -315,18 +385,20 @@ const Index = () => {
 
   const downloadPNG = async (transparent: boolean) => {
     if (!text.trim()) return;
-    const dataUrl = await QRCode.toDataURL(text, {
+    const canvas = document.createElement("canvas");
+    await QRCode.toCanvas(canvas, text, {
       ...opts,
       color: { dark: fgColor, light: transparent ? "#0000" : bgColor },
     });
-    const res = await fetch(dataUrl);
-    downloadBlob(await res.blob(), transparent ? "qrcode-transparent.png" : "qrcode.png");
+    await drawLogoOnCanvas(canvas, transparent);
+    canvas.toBlob((b) => b && downloadBlob(b, transparent ? "qrcode-transparent.png" : "qrcode.png"), "image/png");
   };
 
   const downloadJPEG = async () => {
     if (!text.trim()) return;
     const canvas = document.createElement("canvas");
     await QRCode.toCanvas(canvas, text, opts);
+    await drawLogoOnCanvas(canvas, false);
     canvas.toBlob((b) => b && downloadBlob(b, "qrcode.jpg"), "image/jpeg", 0.95);
   };
 
@@ -337,7 +409,10 @@ const Index = () => {
 
   const downloadPDF = async () => {
     if (!text.trim()) return;
-    const dataUrl = await QRCode.toDataURL(text, { ...opts, width: 1024 });
+    const canvas = document.createElement("canvas");
+    await QRCode.toCanvas(canvas, text, { ...opts, width: 1024 });
+    await drawLogoOnCanvas(canvas, false);
+    const dataUrl = canvas.toDataURL("image/png");
     const pdf = new jsPDF({ unit: "pt", format: "a4" });
     const pageW = pdf.internal.pageSize.getWidth();
     const imgSize = 360;
@@ -512,6 +587,68 @@ const Index = () => {
                     <SelectItem value="H">High — ~30% recovery</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border/60 bg-background/30 p-4">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-primary" /> Center logo</Label>
+                  {logoDataUrl && (
+                    <Button variant="ghost" size="sm" onClick={() => setLogoDataUrl("")} className="h-7 gap-1 text-xs">
+                      <X className="h-3 w-3" /> Remove
+                    </Button>
+                  )}
+                </div>
+
+                <div
+                  onClick={() => logoInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); handleLogoFile(e.dataTransfer.files?.[0] ?? null); }}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-background/40 p-3 hover:border-primary/60"
+                >
+                  {logoDataUrl ? (
+                    <img src={logoDataUrl} alt="Logo" className="h-12 w-12 rounded object-contain bg-white/10" />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded bg-background/60 text-muted-foreground">
+                      <Upload className="h-5 w-5" />
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    {logoDataUrl ? "Click to replace logo" : "Upload your company logo (PNG, JPEG, SVG)"}
+                  </div>
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => handleLogoFile(e.target.files?.[0] ?? null)} />
+                </div>
+
+                {logoDataUrl && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Logo size</Label>
+                        <span className="font-mono text-xs text-muted-foreground">{logoSize}%</span>
+                      </div>
+                      <Slider value={[logoSize]} min={8} max={35} step={1} onValueChange={(v) => setLogoSize(v[0])} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Padding</Label>
+                        <span className="font-mono text-xs text-muted-foreground">{logoPadding}%</span>
+                      </div>
+                      <Slider value={[logoPadding]} min={0} max={15} step={1} onValueChange={(v) => setLogoPadding(v[0])} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Shape</Label>
+                      <Select value={logoShape} onValueChange={(v) => setLogoShape(v as typeof logoShape)}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="rounded">Rounded</SelectItem>
+                          <SelectItem value="square">Square</SelectItem>
+                          <SelectItem value="circle">Circle</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Tip: keep error correction at High when using a logo.</p>
+                  </>
+                )}
               </div>
             </div>
           </Card>
