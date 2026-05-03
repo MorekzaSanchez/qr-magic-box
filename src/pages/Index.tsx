@@ -783,11 +783,16 @@ const Index = () => {
                       </span>
                       <span>ZIP downloaded</span>
                     </div>
-                    <div className="max-h-64 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
+                    <div className="max-h-80 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
                       {bulkScanResults.map((r, i) => (
                         <div key={i} className="flex items-start gap-3 p-3 text-xs">
+                          {r.thumb ? (
+                            <img src={r.thumb} alt={r.file} className="h-12 w-12 shrink-0 rounded border border-border object-cover" />
+                          ) : (
+                            <div className="h-12 w-12 shrink-0 rounded border border-border bg-muted" />
+                          )}
                           <span
-                            className={`mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full ${
+                            className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${
                               r.status === "ok" ? "bg-primary" : "bg-destructive"
                             }`}
                           />
