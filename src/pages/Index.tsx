@@ -588,6 +588,68 @@ const Index = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-3 rounded-lg border border-border/60 bg-background/30 p-4">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-primary" /> Center logo</Label>
+                  {logoDataUrl && (
+                    <Button variant="ghost" size="sm" onClick={() => setLogoDataUrl("")} className="h-7 gap-1 text-xs">
+                      <X className="h-3 w-3" /> Remove
+                    </Button>
+                  )}
+                </div>
+
+                <div
+                  onClick={() => logoInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); handleLogoFile(e.dataTransfer.files?.[0] ?? null); }}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-background/40 p-3 hover:border-primary/60"
+                >
+                  {logoDataUrl ? (
+                    <img src={logoDataUrl} alt="Logo" className="h-12 w-12 rounded object-contain bg-white/10" />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded bg-background/60 text-muted-foreground">
+                      <Upload className="h-5 w-5" />
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    {logoDataUrl ? "Click to replace logo" : "Upload your company logo (PNG, JPEG, SVG)"}
+                  </div>
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => handleLogoFile(e.target.files?.[0] ?? null)} />
+                </div>
+
+                {logoDataUrl && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Logo size</Label>
+                        <span className="font-mono text-xs text-muted-foreground">{logoSize}%</span>
+                      </div>
+                      <Slider value={[logoSize]} min={8} max={35} step={1} onValueChange={(v) => setLogoSize(v[0])} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Padding</Label>
+                        <span className="font-mono text-xs text-muted-foreground">{logoPadding}%</span>
+                      </div>
+                      <Slider value={[logoPadding]} min={0} max={15} step={1} onValueChange={(v) => setLogoPadding(v[0])} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Shape</Label>
+                      <Select value={logoShape} onValueChange={(v) => setLogoShape(v as typeof logoShape)}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="rounded">Rounded</SelectItem>
+                          <SelectItem value="square">Square</SelectItem>
+                          <SelectItem value="circle">Circle</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Tip: keep error correction at High when using a logo.</p>
+                  </>
+                )}
+              </div>
             </div>
           </Card>
 
