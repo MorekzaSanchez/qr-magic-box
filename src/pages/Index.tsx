@@ -49,11 +49,32 @@ const Index = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk scan state
-  type BulkScanRow = { file: string; data: string; status: "ok" | "fail" };
+  type BulkScanRow = { file: string; data: string; status: "ok" | "fail"; thumb: string };
   const [bulkScanBusy, setBulkScanBusy] = useState(false);
   const [bulkScanProgress, setBulkScanProgress] = useState(0);
   const [bulkScanResults, setBulkScanResults] = useState<BulkScanRow[]>([]);
   const bulkScanInputRef = useRef<HTMLInputElement>(null);
+
+  // History (persisted)
+  type HistoryEntry = { id: string; at: number; data: string; status: "ok" | "fail"; file: string; thumb: string; source: "single" | "bulk" | "camera" };
+  const HISTORY_KEY = "qr_scan_history_v1";
+  const HISTORY_LIMIT = 100;
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_LIMIT))); } catch { /* noop */ }
+  }, [history]);
+  const addHistory = (entries: HistoryEntry[]) => {
+    if (!entries.length) return;
+    setHistory((prev) => [...entries, ...prev].slice(0, HISTORY_LIMIT));
+  };
+  const clearHistory = () => setHistory([]);
 
   const isUrl = (s: string) => /^(https?:\/\/|mailto:|tel:|sms:|geo:)/i.test(s.trim());
 
@@ -86,10 +107,13 @@ const Index = () => {
       const w = Math.round(img.width * scale);
       const h = Math.round(img.height * scale);
       const code = decodeImageData(img, w, h);
+      const thumb = await makeThumb(file);
       if (code?.data) {
         setScanResult(code.data);
+        addHistory([{ id: `${Date.now()}`, at: Date.now(), data: code.data, status: "ok", file: file.name, thumb, source: "single" }]);
         toast({ title: "QR decoded", description: code.data.slice(0, 60) });
       } else {
+        addHistory([{ id: `${Date.now()}`, at: Date.now(), data: "", status: "fail", file: file.name, thumb, source: "single" }]);
         toast({ title: "No QR found", description: "Try a clearer or higher-res image.", variant: "destructive" });
       }
     } catch (e) {
@@ -127,6 +151,7 @@ const Index = () => {
           const code = decodeImageData(v, v.videoWidth, v.videoHeight);
           if (code?.data) {
             setScanResult(code.data);
+            addHistory([{ id: `${Date.now()}`, at: Date.now(), data: code.data, status: "ok", file: "camera", thumb: "", source: "camera" }]);
             toast({ title: "QR decoded", description: code.data.slice(0, 60) });
             stopCamera();
             return;
@@ -176,6 +201,28 @@ const Index = () => {
 
   const csvEscape = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
+  const makeThumb = async (file: File, max = 96): Promise<string> => {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      ctx.drawImage(img, 0, 0, w, h);
+      return c.toDataURL("image/jpeg", 0.7);
+    } catch {
+      return "";
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const handleBulkScan = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     if (files.length > 500) {
@@ -190,15 +237,25 @@ const Index = () => {
       const arr = Array.from(files);
       for (let i = 0; i < arr.length; i++) {
         const f = arr[i];
+        const thumb = await makeThumb(f);
         try {
           const data = await decodeFileToText(f);
-          rows.push({ file: f.name, data: data ?? "", status: data ? "ok" : "fail" });
+          rows.push({ file: f.name, data: data ?? "", status: data ? "ok" : "fail", thumb });
         } catch {
-          rows.push({ file: f.name, data: "", status: "fail" });
+          rows.push({ file: f.name, data: "", status: "fail", thumb });
         }
         setBulkScanProgress(Math.round(((i + 1) / arr.length) * 100));
       }
       setBulkScanResults(rows);
+      addHistory(rows.map((r, idx) => ({
+        id: `${Date.now()}_${idx}`,
+        at: Date.now(),
+        data: r.data,
+        status: r.status,
+        file: r.file,
+        thumb: r.thumb,
+        source: "bulk" as const,
+      })));
 
       const zip = new JSZip();
       const csv = ["file,status,data", ...rows.map((r) => `${csvEscape(r.file)},${r.status},${csvEscape(r.data)}`)].join("\n");
@@ -726,11 +783,16 @@ const Index = () => {
                       </span>
                       <span>ZIP downloaded</span>
                     </div>
-                    <div className="max-h-64 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
+                    <div className="max-h-80 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
                       {bulkScanResults.map((r, i) => (
                         <div key={i} className="flex items-start gap-3 p-3 text-xs">
+                          {r.thumb ? (
+                            <img src={r.thumb} alt={r.file} className="h-12 w-12 shrink-0 rounded border border-border object-cover" />
+                          ) : (
+                            <div className="h-12 w-12 shrink-0 rounded border border-border bg-muted" />
+                          )}
                           <span
-                            className={`mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full ${
+                            className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${
                               r.status === "ok" ? "bg-primary" : "bg-destructive"
                             }`}
                           />
@@ -743,6 +805,78 @@ const Index = () => {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card className="border-border/60 bg-card/60 p-6 backdrop-blur md:p-8">
+              <div className="space-y-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <ScanLine className="h-4 w-4 text-primary" /> Past scans
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Last {HISTORY_LIMIT} scans, stored locally in your browser.
+                    </p>
+                  </div>
+                  {history.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={clearHistory} className="gap-2">
+                      <X className="h-4 w-4" /> Clear history
+                    </Button>
+                  )}
+                </div>
+
+                {history.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No scans yet.</p>
+                ) : (
+                  <div className="max-h-96 overflow-auto rounded-lg border border-border bg-background/40 divide-y divide-border">
+                    {history.map((h) => (
+                      <div key={h.id} className="flex items-start gap-3 p-3 text-xs">
+                        {h.thumb ? (
+                          <img src={h.thumb} alt={h.file} className="h-12 w-12 shrink-0 rounded border border-border object-cover" />
+                        ) : (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border bg-muted">
+                            <Camera className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className={`inline-block h-2 w-2 rounded-full ${h.status === "ok" ? "bg-primary" : "bg-destructive"}`} />
+                            <span className="font-mono truncate">{h.file}</span>
+                            <span className="ml-auto shrink-0">{new Date(h.at).toLocaleString()}</span>
+                          </div>
+                          <div className={`mt-1 break-all ${h.status === "ok" ? "text-foreground" : "text-muted-foreground italic"}`}>
+                            {h.status === "ok" ? h.data : "No QR detected"}
+                          </div>
+                          {h.status === "ok" && (
+                            <div className="mt-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => { navigator.clipboard.writeText(h.data); toast({ title: "Copied" }); }}
+                              >
+                                <Copy className="h-3 w-3" /> Copy
+                              </Button>
+                              {isUrl(h.data) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  asChild
+                                >
+                                  <a href={h.data} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-3 w-3" /> Open
+                                  </a>
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
