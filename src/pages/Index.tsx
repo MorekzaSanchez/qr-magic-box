@@ -101,6 +101,9 @@ const Index = () => {
   const [bulkFormat, setBulkFormat] = useState<BulkFormat>("png");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
+  const [previewFormats, setPreviewFormats] = useState<BulkFormat[]>(["png"]);
+  const togglePreviewFormat = (f: BulkFormat) =>
+    setPreviewFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
 
   // Scanner state
   const [scanResult, setScanResult] = useState<string>("");
