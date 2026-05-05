@@ -783,6 +783,42 @@ const Index = () => {
                     />
                   </div>
                 )}
+
+                <div className="rounded-xl border border-border/60 bg-background/40 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Live preview · {bulkFormat.toUpperCase()}
+                    </Label>
+                    <span className="text-xs text-muted-foreground">
+                      {bulkValues[0] ? `First entry${logoDataUrl ? " · with logo" : ""}` : "Add an entry to preview"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    {bulkValues[0] ? (
+                      <div
+                        className={`rounded-lg p-3 ${bulkFormat === "png-transparent" ? "bg-[conic-gradient(at_50%_50%,#e5e7eb_0_25%,transparent_0_50%,#e5e7eb_0_75%,transparent_0)] [background-size:16px_16px]" : "bg-white"}`}
+                      >
+                        {bulkFormat === "svg" ? (
+                          <div
+                            className="h-[280px] w-[280px] [&>svg]:h-full [&>svg]:w-full"
+                            dangerouslySetInnerHTML={{ __html: bulkPreviewSvg }}
+                          />
+                        ) : (
+                          <canvas ref={bulkPreviewRef} className="h-[280px] w-[280px]" />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex h-[280px] w-[280px] items-center justify-center rounded-lg border border-dashed border-border/60 text-xs text-muted-foreground">
+                        No entries yet
+                      </div>
+                    )}
+                  </div>
+                  {bulkFormat === "svg" && logoDataUrl && (
+                    <p className="mt-3 text-center text-xs text-muted-foreground">
+                      Note: logo overlay is applied to PNG/JPEG/PDF only, not SVG.
+                    </p>
+                  )}
+                </div>
               </div>
             </Card>
           </TabsContent>
