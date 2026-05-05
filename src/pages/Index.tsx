@@ -373,6 +373,35 @@ const Index = () => {
     })();
   }, [text, opts, logoDataUrl, logoSize, logoPadding, logoShape, bgColor]);
 
+  // Live bulk preview (first value) reflecting selected format
+  const bulkPreviewRef = useRef<HTMLCanvasElement>(null);
+  const [bulkPreviewSvg, setBulkPreviewSvg] = useState<string>("");
+  useEffect(() => {
+    const value = bulkValues[0];
+    if (!value) {
+      setBulkPreviewSvg("");
+      return;
+    }
+    (async () => {
+      try {
+        if (bulkFormat === "svg") {
+          const s = await QRCode.toString(value, { ...opts, type: "svg" });
+          setBulkPreviewSvg(s);
+        } else {
+          setBulkPreviewSvg("");
+          if (bulkPreviewRef.current) {
+            const transparent = bulkFormat === "png-transparent";
+            const renderOpts = transparent
+              ? { ...opts, width: 320, color: { dark: fgColor, light: "#0000" } }
+              : { ...opts, width: 320 };
+            await QRCode.toCanvas(bulkPreviewRef.current, value, renderOpts);
+            await drawLogoOnCanvas(bulkPreviewRef.current, transparent);
+          }
+        }
+      } catch { /* noop */ }
+    })();
+  }, [bulkValues, bulkFormat, opts, fgColor, bgColor, logoDataUrl, logoSize, logoPadding, logoShape]);
+
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
