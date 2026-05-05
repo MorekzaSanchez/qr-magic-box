@@ -825,37 +825,58 @@ const Index = () => {
                 )}
 
                 <div className="rounded-xl border border-border/60 bg-background/40 p-4">
-                  <div className="mb-3 flex items-center justify-between">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Live preview · {bulkFormat.toUpperCase()}
+                      Live preview · compare formats
                     </Label>
                     <span className="text-xs text-muted-foreground">
                       {bulkValues[0] ? `First entry${logoDataUrl ? " · with logo" : ""}` : "Add an entry to preview"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-center">
-                    {bulkValues[0] ? (
-                      <div
-                        className={`rounded-lg p-3 ${bulkFormat === "png-transparent" ? "bg-[conic-gradient(at_50%_50%,#e5e7eb_0_25%,transparent_0_50%,#e5e7eb_0_75%,transparent_0)] [background-size:16px_16px]" : "bg-white"}`}
-                      >
-                        {bulkFormat === "svg" ? (
-                          <div
-                            className="h-[280px] w-[280px] [&>svg]:h-full [&>svg]:w-full"
-                            dangerouslySetInnerHTML={{ __html: bulkPreviewSvg }}
-                          />
-                        ) : (
-                          <canvas ref={bulkPreviewRef} className="h-[280px] w-[280px]" />
-                        )}
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {(["png", "png-transparent", "jpeg", "svg", "pdf"] as BulkFormat[]).map((f) => {
+                      const active = previewFormats.includes(f);
+                      return (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => togglePreviewFormat(f)}
+                          className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                            active
+                              ? "border-primary bg-primary/15 text-primary"
+                              : "border-border/60 bg-background/60 text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {FORMAT_LABEL[f]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {bulkValues[0] ? (
+                    previewFormats.length === 0 ? (
+                      <div className="flex h-[180px] items-center justify-center rounded-lg border border-dashed border-border/60 text-xs text-muted-foreground">
+                        Toggle one or more formats above to preview
                       </div>
                     ) : (
-                      <div className="flex h-[280px] w-[280px] items-center justify-center rounded-lg border border-dashed border-border/60 text-xs text-muted-foreground">
-                        No entries yet
+                      <div className="flex flex-wrap items-start justify-center gap-4">
+                        {previewFormats.map((f) => (
+                          <BulkFormatPreview key={f} value={bulkValues[0]} format={f} />
+                        ))}
                       </div>
-                    )}
-                  </div>
-                  {bulkFormat === "svg" && logoDataUrl && (
+                    )
+                  ) : (
+                    <div className="flex h-[180px] items-center justify-center rounded-lg border border-dashed border-border/60 text-xs text-muted-foreground">
+                      No entries yet
+                    </div>
+                  )}
+                  {previewFormats.includes("svg") && logoDataUrl && (
                     <p className="mt-3 text-center text-xs text-muted-foreground">
                       Note: logo overlay is applied to PNG/JPEG/PDF only, not SVG.
+                    </p>
+                  )}
+                  {previewFormats.includes("pdf") && (
+                    <p className="mt-1 text-center text-xs text-muted-foreground">
+                      PDF embeds the PNG raster — preview matches PNG output.
                     </p>
                   )}
                 </div>
