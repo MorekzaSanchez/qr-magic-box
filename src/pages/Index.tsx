@@ -376,34 +376,71 @@ const Index = () => {
     })();
   }, [text, opts, logoDataUrl, logoSize, logoPadding, logoShape, bgColor]);
 
-  // Live bulk preview (first value) reflecting selected format
-  const bulkPreviewRef = useRef<HTMLCanvasElement>(null);
-  const [bulkPreviewSvg, setBulkPreviewSvg] = useState<string>("");
-  useEffect(() => {
-    const value = bulkValues[0];
-    if (!value) {
-      setBulkPreviewSvg("");
-      return;
-    }
-    (async () => {
-      try {
-        if (bulkFormat === "svg") {
-          const s = await QRCode.toString(value, { ...opts, type: "svg" });
-          setBulkPreviewSvg(s);
-        } else {
-          setBulkPreviewSvg("");
-          if (bulkPreviewRef.current) {
-            const transparent = bulkFormat === "png-transparent";
-            const renderOpts = transparent
-              ? { ...opts, width: 320, color: { dark: fgColor, light: "#0000" } }
-              : { ...opts, width: 320 };
-            await QRCode.toCanvas(bulkPreviewRef.current, value, renderOpts);
-            await drawLogoOnCanvas(bulkPreviewRef.current, transparent);
+  // Live bulk preview (first value) — supports multiple formats simultaneously for comparison
+  const FORMAT_LABEL: Record<BulkFormat, string> = {
+    png: "PNG",
+    "png-transparent": "PNG · Transparent",
+    jpeg: "JPEG",
+    svg: "SVG",
+    pdf: "PDF",
+  };
+  const BulkFormatPreview = ({ value, format }: { value: string; format: BulkFormat }) => {
+    const ref = useRef<HTMLCanvasElement>(null);
+    const [svg, setSvg] = useState("");
+    useEffect(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          if (format === "svg") {
+            const s = await QRCode.toString(value, { ...opts, type: "svg" });
+            if (!cancelled) setSvg(s);
+          } else {
+            if (!cancelled) setSvg("");
+            if (ref.current) {
+              const transparent = format === "png-transparent";
+              // PDF embeds raster image, so preview matches PNG (opaque) rendering
+              const renderOpts = transparent
+                ? { ...opts, width: 320, color: { dark: fgColor, light: "#0000" } }
+                : { ...opts, width: 320 };
+              await QRCode.toCanvas(ref.current, value, renderOpts);
+              await drawLogoOnCanvas(ref.current, transparent);
+              if (format === "jpeg") {
+                // simulate JPEG compression artifacts in preview
+                const dataUrl = ref.current.toDataURL("image/jpeg", 0.85);
+                const img = new Image();
+                await new Promise<void>((res) => { img.onload = () => res(); img.src = dataUrl; });
+                const ctx = ref.current.getContext("2d");
+                if (ctx && !cancelled) {
+                  ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+                  ctx.drawImage(img, 0, 0);
+                }
+              }
+            }
           }
-        }
-      } catch { /* noop */ }
-    })();
-  }, [bulkValues, bulkFormat, opts, fgColor, bgColor, logoDataUrl, logoSize, logoPadding, logoShape]);
+        } catch { /* noop */ }
+      })();
+      return () => { cancelled = true; };
+    }, [value, format]);
+    const transparentBg = format === "png-transparent";
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div
+          className={`rounded-lg p-2 ${transparentBg ? "bg-[conic-gradient(at_50%_50%,#e5e7eb_0_25%,transparent_0_50%,#e5e7eb_0_75%,transparent_0)] [background-size:12px_12px]" : "bg-white"}`}
+        >
+          {format === "svg" ? (
+            <div
+              className="h-[180px] w-[180px] [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          ) : (
+            <canvas ref={ref} className="h-[180px] w-[180px]" />
+          )}
+        </div>
+        <span className="text-xs font-medium text-muted-foreground">{FORMAT_LABEL[format]}</span>
+      </div>
+    );
+  };
+
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
