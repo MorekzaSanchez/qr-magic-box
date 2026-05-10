@@ -202,16 +202,29 @@ const Index = () => {
 
   const startCamera = async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: "Camera unavailable", description: "Your browser does not support camera access. On iOS, use Safari over HTTPS.", variant: "destructive" });
+        return;
+      }
+      setCameraOn(true);
+      // Wait a frame so the <video> element is mounted before we attach the stream
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
+        video: { facingMode: { ideal: "environment" } },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      const v = videoRef.current;
+      if (v) {
+        v.srcObject = stream;
+        v.setAttribute("playsinline", "true");
+        v.muted = true;
+        try {
+          await v.play();
+        } catch {
+          // Autoplay may require another gesture; user can tap the video
+        }
       }
-      setCameraOn(true);
       const tick = () => {
         const v = videoRef.current;
         if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
@@ -227,8 +240,20 @@ const Index = () => {
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
-    } catch (e) {
-      toast({ title: "Camera unavailable", description: String(e), variant: "destructive" });
+    } catch (e: any) {
+      stopCamera();
+      const name = e?.name || "";
+      const msg =
+        name === "NotAllowedError"
+          ? "Permission denied. Allow camera access in your browser settings."
+          : name === "NotFoundError"
+          ? "No camera found on this device."
+          : name === "NotReadableError"
+          ? "Camera is in use by another app."
+          : name === "SecurityError"
+          ? "Camera requires a secure (HTTPS) connection."
+          : String(e?.message || e);
+      toast({ title: "Camera unavailable", description: msg, variant: "destructive" });
     }
   };
 
