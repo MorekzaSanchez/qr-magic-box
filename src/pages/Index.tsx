@@ -240,8 +240,20 @@ const Index = () => {
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
-    } catch (e) {
-      toast({ title: "Camera unavailable", description: String(e), variant: "destructive" });
+    } catch (e: any) {
+      stopCamera();
+      const name = e?.name || "";
+      const msg =
+        name === "NotAllowedError"
+          ? "Permission denied. Allow camera access in your browser settings."
+          : name === "NotFoundError"
+          ? "No camera found on this device."
+          : name === "NotReadableError"
+          ? "Camera is in use by another app."
+          : name === "SecurityError"
+          ? "Camera requires a secure (HTTPS) connection."
+          : String(e?.message || e);
+      toast({ title: "Camera unavailable", description: msg, variant: "destructive" });
     }
   };
 
