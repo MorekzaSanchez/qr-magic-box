@@ -114,6 +114,8 @@ const Index = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const phoneUploadRef = useRef<HTMLInputElement>(null);
+  const phoneCameraRef = useRef<HTMLInputElement>(null);
 
   // Bulk scan state
   type BulkScanRow = { file: string; data: string; status: "ok" | "fail"; thumb: string };
@@ -920,21 +922,33 @@ const Index = () => {
                     </p>
                   </div>
 
-                  <div
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const f = e.dataTransfer.files?.[0];
-                      if (f) handleScanFile(f);
-                    }}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background/40 p-8 text-center transition-colors hover:border-primary/60 hover:bg-background/60"
-                  >
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm font-medium">Drop a QR image here or click to upload</p>
-                    <p className="text-xs text-muted-foreground">PNG, JPEG, WEBP, SVG raster…</p>
+                  {/* Upload fallback — optimized for phone */}
+                  <div className="space-y-3 rounded-xl border border-border bg-background/40 p-5">
+                    <div className="flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="text-sm font-medium">Upload from device</h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      If camera scanning does not work, upload a saved image or take a new photo.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => phoneUploadRef.current?.click()}
+                      >
+                        <ImageIcon className="h-4 w-4" /> Gallery
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => phoneCameraRef.current?.click()}
+                      >
+                        <Camera className="h-4 w-4" /> Take Photo
+                      </Button>
+                    </div>
                     <input
-                      ref={fileInputRef}
+                      ref={phoneUploadRef}
                       type="file"
                       accept="image/*"
                       className="hidden"
@@ -943,11 +957,46 @@ const Index = () => {
                         if (f) handleScanFile(f);
                       }}
                     />
+                    <input
+                      ref={phoneCameraRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleScanFile(f);
+                      }}
+                    />
+
+                    {/* Desktop drag-and-drop fallback */}
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) handleScanFile(f);
+                      }}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border bg-background/30 p-4 text-center transition-colors hover:border-primary/60 hover:bg-background/50"
+                    >
+                      <p className="text-xs font-medium text-muted-foreground">Or drop an image here</p>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleScanFile(f);
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3">
                     <div className="h-px flex-1 bg-border" />
-                    <span className="text-xs text-muted-foreground">or</span>
+                    <span className="text-xs text-muted-foreground">or use live camera</span>
                     <div className="h-px flex-1 bg-border" />
                   </div>
 
