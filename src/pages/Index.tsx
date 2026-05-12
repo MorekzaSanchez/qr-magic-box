@@ -114,6 +114,8 @@ const Index = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const phoneUploadRef = useRef<HTMLInputElement>(null);
+  const phoneCameraRef = useRef<HTMLInputElement>(null);
 
   // Bulk scan state
   type BulkScanRow = { file: string; data: string; status: "ok" | "fail"; thumb: string };
