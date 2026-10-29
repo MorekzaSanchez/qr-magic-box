@@ -445,14 +445,17 @@ const Index = () => {
     [bulkInput],
   );
 
+  // While a logo is applied, error correction is forced to High (max recovery)
+  // so the QR stays scannable even with modules covered by the logo.
+  const effectiveEc: ECLevel = logoDataUrl ? "H" : ecLevel;
   const opts = useMemo(
     () => ({
-      errorCorrectionLevel: ecLevel,
+      errorCorrectionLevel: effectiveEc,
       margin,
       width: size,
       color: { dark: fgColor, light: bgColor },
     }),
-    [ecLevel, margin, size, fgColor, bgColor],
+    [effectiveEc, margin, size, fgColor, bgColor],
   );
 
   useEffect(() => {
@@ -755,7 +758,7 @@ const Index = () => {
 
               <div className="space-y-2">
                 <Label>Error correction</Label>
-                <Select value={ecLevel} onValueChange={(v) => setEcLevel(v as ECLevel)}>
+                <Select value={effectiveEc} onValueChange={(v) => setEcLevel(v as ECLevel)} disabled={!!logoDataUrl}>
                   <SelectTrigger className="h-11">
                     <SelectValue />
                   </SelectTrigger>
@@ -766,6 +769,9 @@ const Index = () => {
                     <SelectItem value="H">High — ~30% recovery</SelectItem>
                   </SelectContent>
                 </Select>
+                {logoDataUrl && (
+                  <p className="text-[11px] text-muted-foreground">Locked to High (max recovery) while a logo is applied.</p>
+                )}
               </div>
 
               <div className="space-y-3 rounded-lg border border-border/60 bg-background/30 p-4">
@@ -825,7 +831,7 @@ const Index = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Tip: keep error correction at High when using a logo.</p>
+                    <p className="text-[11px] text-muted-foreground">Your logo is drawn from the original uploaded file — it is never regenerated or re-compressed. Error correction stays at High for reliable scanning.</p>
                   </>
                 )}
               </div>
