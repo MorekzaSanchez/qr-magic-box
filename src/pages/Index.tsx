@@ -40,11 +40,40 @@ const Index = () => {
   const [logoShape, setLogoShape] = useState<"square" | "circle" | "rounded">("rounded");
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogoFile = (file: File | null) => {
+  // The logo is kept exactly as uploaded (original bytes, no re-encoding).
+  // SVG files are rasterized once at high resolution so they draw crisply.
+  const handleLogoFile = async (file: File | null) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setLogoDataUrl(String(reader.result));
-    reader.readAsDataURL(file);
+    const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+    if (isSvg) {
+      const url = URL.createObjectURL(file);
+      try {
+        const img = new Image();
+        img.src = url;
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+        const w = img.naturalWidth || 1024;
+        const h = img.naturalHeight || 1024;
+        const maxDim = 1024;
+        const scale = Math.min(maxDim / Math.max(w, h), 4);
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w * scale));
+        c.height = Math.max(1, Math.round(h * scale));
+        const ctx = c.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        setLogoDataUrl(c.toDataURL("image/png"));
+      } catch {
+        toast({ title: "Could not read logo", description: "That SVG file could not be loaded.", variant: "destructive" });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => setLogoDataUrl(String(reader.result));
+      reader.readAsDataURL(file);
+    }
+    // Max recovery so the code stays scannable under the logo.
+    setEcLevel("H");
   };
 
   const loadLogoImage = async (): Promise<HTMLImageElement | null> => {
@@ -57,12 +86,45 @@ const Index = () => {
     });
   };
 
+  // Progressive halving downscale keeps the logo sharp when it is much larger
+  // than the target size (a single big drawImage blurs the details).
+  const drawImageHighQuality = (
+    ctx: CanvasRenderingContext2D,
+    img: CanvasImageSource & { width: number; height: number },
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ) => {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    let src: CanvasImageSource = img;
+    let sw = img.width;
+    let sh = img.height;
+    while (sw > dw * 2 && sh > dh * 2) {
+      const nw = Math.max(1, Math.floor(sw / 2));
+      const nh = Math.max(1, Math.floor(sh / 2));
+      const c = document.createElement("canvas");
+      c.width = nw;
+      c.height = nh;
+      const cctx = c.getContext("2d");
+      if (!cctx) break;
+      cctx.imageSmoothingEnabled = true;
+      cctx.imageSmoothingQuality = "high";
+      cctx.drawImage(src, 0, 0, nw, nh);
+      src = c;
+      sw = nw;
+      sh = nh;
+    }
+    ctx.drawImage(src, dx, dy, dw, dh);
+  };
+
   const drawLogoOnCanvas = async (canvas: HTMLCanvasElement, transparent: boolean) => {
     if (!logoDataUrl) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const img = await loadLogoImage();
-    if (!img) return;
+    if (!img || !img.naturalWidth || !img.naturalHeight) return;
     const W = canvas.width;
     const target = Math.round((logoSize / 100) * W);
     const pad = Math.round((logoPadding / 100) * W);
@@ -77,7 +139,6 @@ const Index = () => {
       ctx.beginPath();
       ctx.arc(W / 2, W / 2, target / 2, 0, Math.PI * 2);
       ctx.clip();
-      ctx.drawImage(img, x, y, target, target);
     } else if (logoShape === "rounded") {
       const r = Math.round(target * 0.18);
       const rx = x - pad, ry = y - pad, rw = target + pad * 2, rh = target + pad * 2;
@@ -89,11 +150,18 @@ const Index = () => {
       ctx.arcTo(rx, ry, rx + rw, ry, r);
       ctx.closePath();
       ctx.fill();
-      ctx.drawImage(img, x, y, target, target);
     } else {
       ctx.fillRect(x - pad, y - pad, target + pad * 2, target + pad * 2);
-      ctx.drawImage(img, x, y, target, target);
     }
+    // Aspect-ratio preserved fit inside the target box (no stretching).
+    const ratio = img.naturalWidth / img.naturalHeight;
+    let dw = target;
+    let dh = target;
+    if (ratio > 1) dh = Math.max(1, Math.round(target / ratio));
+    else if (ratio < 1) dw = Math.max(1, Math.round(target * ratio));
+    const dx = Math.round((W - dw) / 2);
+    const dy = Math.round((W - dh) / 2);
+    drawImageHighQuality(ctx, img, dx, dy, dw, dh);
     ctx.restore();
   };
 
@@ -377,14 +445,17 @@ const Index = () => {
     [bulkInput],
   );
 
+  // While a logo is applied, error correction is forced to High (max recovery)
+  // so the QR stays scannable even with modules covered by the logo.
+  const effectiveEc: ECLevel = logoDataUrl ? "H" : ecLevel;
   const opts = useMemo(
     () => ({
-      errorCorrectionLevel: ecLevel,
+      errorCorrectionLevel: effectiveEc,
       margin,
       width: size,
       color: { dark: fgColor, light: bgColor },
     }),
-    [ecLevel, margin, size, fgColor, bgColor],
+    [effectiveEc, margin, size, fgColor, bgColor],
   );
 
   useEffect(() => {
@@ -687,7 +758,7 @@ const Index = () => {
 
               <div className="space-y-2">
                 <Label>Error correction</Label>
-                <Select value={ecLevel} onValueChange={(v) => setEcLevel(v as ECLevel)}>
+                <Select value={effectiveEc} onValueChange={(v) => setEcLevel(v as ECLevel)} disabled={!!logoDataUrl}>
                   <SelectTrigger className="h-11">
                     <SelectValue />
                   </SelectTrigger>
@@ -698,6 +769,9 @@ const Index = () => {
                     <SelectItem value="H">High — ~30% recovery</SelectItem>
                   </SelectContent>
                 </Select>
+                {logoDataUrl && (
+                  <p className="text-[11px] text-muted-foreground">Locked to High (max recovery) while a logo is applied.</p>
+                )}
               </div>
 
               <div className="space-y-3 rounded-lg border border-border/60 bg-background/30 p-4">
@@ -757,7 +831,7 @@ const Index = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Tip: keep error correction at High when using a logo.</p>
+                    <p className="text-[11px] text-muted-foreground">Your logo is drawn from the original uploaded file — it is never regenerated or re-compressed. Error correction stays at High for reliable scanning.</p>
                   </>
                 )}
               </div>
