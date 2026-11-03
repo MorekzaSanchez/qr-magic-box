@@ -822,7 +822,7 @@ const Index = () => {
                         <Label className="text-xs">Padding</Label>
                         <span className="font-mono text-xs text-muted-foreground">{logoPadding}%</span>
                       </div>
-                      <Slider value={[logoPadding]} min={0} max={15} step={1} onValueChange={(v) => setLogoPadding(v[0])} />
+                      <Slider value={[logoPadding]} min={0} max={20} step={1} onValueChange={(v) => setLogoPadding(v[0])} />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Shape</Label>
