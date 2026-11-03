@@ -835,6 +835,29 @@ const Index = () => {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Background</Label>
+                      <Select value={logoBgMode} onValueChange={(v) => setLogoBgMode(v as typeof logoBgMode)}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="match">Match QR background</SelectItem>
+                          <SelectItem value="custom">Custom colour</SelectItem>
+                          <SelectItem value="none">None (see-through)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {logoBgMode === "custom" && (
+                        <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 h-11">
+                          <input
+                            type="color"
+                            value={logoBgColor}
+                            onChange={(e) => setLogoBgColor(e.target.value)}
+                            className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent"
+                            aria-label="Logo background colour"
+                          />
+                          <span className="font-mono text-xs text-muted-foreground">{logoBgColor}</span>
+                        </div>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground">Your logo is drawn from the original uploaded file — it is never regenerated or re-compressed. Error correction stays at High for reliable scanning.</p>
                   </>
                 )}
