@@ -38,6 +38,8 @@ const Index = () => {
   const [logoSize, setLogoSize] = useState(20); // % of QR width
   const [logoPadding, setLogoPadding] = useState(6); // % of QR width
   const [logoShape, setLogoShape] = useState<"square" | "circle" | "rounded">("rounded");
+  const [logoBgMode, setLogoBgMode] = useState<"match" | "custom" | "none">("match");
+  const [logoBgColor, setLogoBgColor] = useState("#ffffff");
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   // The logo is kept exactly as uploaded (original bytes, no re-encoding).
@@ -131,27 +133,29 @@ const Index = () => {
     const x = (W - target) / 2;
     const y = (W - target) / 2;
     ctx.save();
-    ctx.fillStyle = transparent ? "rgba(255,255,255,1)" : bgColor;
-    if (logoShape === "circle") {
-      ctx.beginPath();
-      ctx.arc(W / 2, W / 2, target / 2 + pad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(W / 2, W / 2, target / 2, 0, Math.PI * 2);
-      ctx.clip();
-    } else if (logoShape === "rounded") {
-      const r = Math.round(target * 0.18);
-      const rx = x - pad, ry = y - pad, rw = target + pad * 2, rh = target + pad * 2;
-      ctx.beginPath();
-      ctx.moveTo(rx + r, ry);
-      ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
-      ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
-      ctx.arcTo(rx, ry + rh, rx, ry, r);
-      ctx.arcTo(rx, ry, rx + rw, ry, r);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      ctx.fillRect(x - pad, y - pad, target + pad * 2, target + pad * 2);
+    if (logoBgMode !== "none") {
+      ctx.fillStyle = logoBgMode === "custom" ? logoBgColor : transparent ? "rgba(255,255,255,1)" : bgColor;
+      if (logoShape === "circle") {
+        ctx.beginPath();
+        ctx.arc(W / 2, W / 2, target / 2 + pad, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(W / 2, W / 2, target / 2, 0, Math.PI * 2);
+        ctx.clip();
+      } else if (logoShape === "rounded") {
+        const r = Math.round(target * 0.18);
+        const rx = x - pad, ry = y - pad, rw = target + pad * 2, rh = target + pad * 2;
+        ctx.beginPath();
+        ctx.moveTo(rx + r, ry);
+        ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+        ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
+        ctx.arcTo(rx, ry + rh, rx, ry, r);
+        ctx.arcTo(rx, ry, rx + rw, ry, r);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillRect(x - pad, y - pad, target + pad * 2, target + pad * 2);
+      }
     }
     // Aspect-ratio preserved fit inside the target box (no stretching).
     const ratio = img.naturalWidth / img.naturalHeight;
@@ -472,7 +476,7 @@ const Index = () => {
         setSvgString(s);
       } catch { /* noop */ }
     })();
-  }, [text, opts, logoDataUrl, logoSize, logoPadding, logoShape, bgColor]);
+  }, [text, opts, logoDataUrl, logoSize, logoPadding, logoShape, logoBgMode, logoBgColor, bgColor]);
 
   // Live bulk preview (first value) — supports multiple formats simultaneously for comparison
   const FORMAT_LABEL: Record<BulkFormat, string> = {
@@ -811,14 +815,14 @@ const Index = () => {
                         <Label className="text-xs">Logo size</Label>
                         <span className="font-mono text-xs text-muted-foreground">{logoSize}%</span>
                       </div>
-                      <Slider value={[logoSize]} min={8} max={35} step={1} onValueChange={(v) => setLogoSize(v[0])} />
+                      <Slider value={[logoSize]} min={5} max={40} step={1} onValueChange={(v) => setLogoSize(v[0])} />
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs">Padding</Label>
                         <span className="font-mono text-xs text-muted-foreground">{logoPadding}%</span>
                       </div>
-                      <Slider value={[logoPadding]} min={0} max={15} step={1} onValueChange={(v) => setLogoPadding(v[0])} />
+                      <Slider value={[logoPadding]} min={0} max={20} step={1} onValueChange={(v) => setLogoPadding(v[0])} />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Shape</Label>
@@ -830,6 +834,29 @@ const Index = () => {
                           <SelectItem value="circle">Circle</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Background</Label>
+                      <Select value={logoBgMode} onValueChange={(v) => setLogoBgMode(v as typeof logoBgMode)}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="match">Match QR background</SelectItem>
+                          <SelectItem value="custom">Custom colour</SelectItem>
+                          <SelectItem value="none">None (see-through)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {logoBgMode === "custom" && (
+                        <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 h-11">
+                          <input
+                            type="color"
+                            value={logoBgColor}
+                            onChange={(e) => setLogoBgColor(e.target.value)}
+                            className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent"
+                            aria-label="Logo background colour"
+                          />
+                          <span className="font-mono text-xs text-muted-foreground">{logoBgColor}</span>
+                        </div>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground">Your logo is drawn from the original uploaded file — it is never regenerated or re-compressed. Error correction stays at High for reliable scanning.</p>
                   </>
